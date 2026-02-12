@@ -145,7 +145,7 @@ exports.createPaymentIntent = async (req, res, next) => {
         const cashfreeOrder = await paymentService.createCashfreePayment(
           amount,
           'INR',
-          orderId,,
+          orderId,
           {
             phone: user.phone,
             email: user.email,
