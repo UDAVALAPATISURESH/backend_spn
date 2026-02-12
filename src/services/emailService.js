@@ -31,29 +31,46 @@ const getPassword = () => {
 let transporter = null;
 if (hasEmailConfig) {
   const password = getPassword();
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  const useSecure = smtpPort === 465; // Port 465 uses SSL, 587 uses STARTTLS
+  
+  // Log configuration for debugging (without exposing password)
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  console.log(`📧 Configuring email service: ${smtpUser}@${process.env.SMTP_HOST || 'smtp.gmail.com'}:${smtpPort} (secure: ${useSecure})`);
+  
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: false, // true for 465, false for other ports
+    port: smtpPort,
+    secure: useSecure, // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER || process.env.EMAIL_USER,
+      user: smtpUser,
       pass: password,
     },
     // Add timeout configurations to prevent long waits
-    connectionTimeout: 10000, // 10 seconds
-    socketTimeout: 10000, // 10 seconds
+    // Increased slightly for cloud environments that may have network latency
+    connectionTimeout: 15000, // 15 seconds
+    socketTimeout: 15000, // 15 seconds
     greetingTimeout: 10000, // 10 seconds
     // Connection pool options
-    pool: true,
-    maxConnections: 1,
-    maxMessages: 3,
+    pool: false, // Disable pooling for cloud environments to avoid connection issues
+    // TLS options for better compatibility with cloud environments
+    tls: {
+      // Don't reject unauthorized certificates (needed for some cloud environments)
+      // Note: This is less secure but may be necessary for cloud platforms
+      rejectUnauthorized: process.env.NODE_ENV === 'production' ? false : true,
+    },
+    // Retry options
+    retry: {
+      attempts: 1, // Don't retry automatically - we handle errors gracefully
+    },
   });
 
   // Verify transporter configuration (non-blocking with timeout)
   // Note: Verification failure doesn't disable the service - it's just informational
   const verifyTimeout = setTimeout(() => {
     console.warn('⚠️  Email service verification timed out. Will still attempt to send emails.');
-    console.warn('   Please check your SMTP settings and network connectivity.');
+    console.warn('   This is common on cloud platforms (Render, Heroku, etc.) due to network restrictions.');
+    console.warn('   Consider using a dedicated email service like SendGrid, Mailgun, or AWS SES.');
   }, 10000); // 10 second timeout for verification
 
   transporter.verify((error, success) => {
@@ -65,7 +82,8 @@ if (hasEmailConfig) {
       if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
         console.warn('   Connection timeout or refused during verification.');
         console.warn('   Email sending will still be attempted, but may fail.');
-        console.warn('   Check SMTP_HOST and SMTP_PORT settings if emails don\'t send.');
+        console.warn('   On cloud platforms (Render, Heroku, etc.), Gmail SMTP is often blocked.');
+        console.warn('   Consider using SendGrid, Mailgun, or AWS SES instead of Gmail SMTP.');
       } else if (error.code === 'EAUTH' || error.responseCode === 535) {
         console.warn('   Authentication failed. For Gmail:');
         console.warn('   1. Make sure you\'re using an App Password, not your regular password');
@@ -188,7 +206,8 @@ exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
     // Handle timeout errors more gracefully
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Booking confirmation email not sent.');
-      console.warn('   Check SMTP settings and network connectivity if this persists.');
+      console.warn('   Gmail SMTP is often blocked on cloud platforms (Render, Heroku, etc.).');
+      console.warn('   Consider using SendGrid, Mailgun, or AWS SES for better reliability.');
     } else if (error.code === 'EAUTH' || error.responseCode === 535) {
       console.warn('Email authentication failed. Booking confirmation email not sent.');
       console.warn('   For Gmail, use an App Password (not your email address or regular password).');
@@ -275,7 +294,7 @@ exports.sendReminder = async (user, appointment, service, staff) => {
     // Handle timeout errors more gracefully
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Reminder email not sent.');
-      console.warn('   Check SMTP settings and network connectivity if this persists.');
+      console.warn('   Gmail SMTP is often blocked on cloud platforms. Consider using SendGrid, Mailgun, or AWS SES.');
     } else if (error.code === 'EAUTH' || error.responseCode === 535) {
       console.warn('Email authentication failed. Reminder email not sent.');
       console.warn('   For Gmail, use an App Password (not your email address or regular password).');
@@ -359,7 +378,7 @@ exports.send15MinuteReminder = async (user, appointment, service, staff) => {
     // Handle timeout errors more gracefully
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. 15-minute reminder email not sent.');
-      console.warn('   Check SMTP settings and network connectivity if this persists.');
+      console.warn('   Gmail SMTP is often blocked on cloud platforms. Consider using SendGrid, Mailgun, or AWS SES.');
     } else if (error.code === 'EAUTH' || error.responseCode === 535) {
       console.warn('Email authentication failed. 15-minute reminder email not sent.');
       console.warn('   For Gmail, use an App Password (not your email address or regular password).');
@@ -446,7 +465,7 @@ exports.sendPasswordResetEmail = async (user, resetToken) => {
     // Handle timeout errors more gracefully
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Password reset email not sent.');
-      console.warn('   Check SMTP settings and network connectivity if this persists.');
+      console.warn('   Gmail SMTP is often blocked on cloud platforms. Consider using SendGrid, Mailgun, or AWS SES.');
     } else if (error.code === 'EAUTH' || error.responseCode === 535) {
       console.warn('Email authentication failed. Password reset email not sent.');
       console.warn('   For Gmail, use an App Password (not your email address or regular password).');
@@ -653,7 +672,8 @@ exports.sendPaymentInvoice = async (user, appointment, payment, services = null)
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Payment invoice email not sent.');
       console.warn('   This is a non-critical error - payment verification was successful.');
-      console.warn('   Check SMTP settings and network connectivity if this persists.');
+      console.warn('   Gmail SMTP is often blocked on cloud platforms (Render, Heroku, etc.).');
+      console.warn('   Consider using SendGrid, Mailgun, or AWS SES for better reliability.');
     } else if (error.code === 'EAUTH' || error.responseCode === 535) {
       console.warn('Email authentication failed. Payment invoice email not sent.');
       console.warn('   For Gmail, use an App Password (not your email address or regular password).');

@@ -73,9 +73,17 @@ exports.forgotPassword = async (req, res, next) => {
 
     // Send password reset email
     const emailService = require('../services/emailService');
-    await emailService.sendPasswordResetEmail(user, resetToken).catch((err) => {
+    const emailResult = await emailService.sendPasswordResetEmail(user, resetToken).catch((err) => {
       console.error('Failed to send password reset email:', err);
+      return null;
     });
+    
+    // Log if email was sent successfully
+    if (emailResult) {
+      console.log(`Password reset email sent to ${user.email}`);
+    } else {
+      console.warn(`Password reset email could not be sent to ${user.email} - check email service configuration`);
+    }
 
     res.json({ message: 'If the email exists, a password reset link has been sent.' });
   } catch (err) {

@@ -231,10 +231,9 @@ exports.getAvailableSlots = async (req, res, next) => {
     });
 
     if (!availability) {
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      // Return empty slots without message - frontend will handle display
       return res.json({ 
-        slots: [],
-        message: `No availability set for ${dayNames[dayOfWeek]}. Please contact admin to set staff availability or select a different day.`
+        slots: []
       });
     }
 
