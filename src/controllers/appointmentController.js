@@ -17,7 +17,7 @@ exports.myAppointments = async (req, res, next) => {
           include: [Service, Staff],
         },
       ],
-      order: [['startTime', 'DESC']],
+      order: [['startTime', 'ASC']],
     });
 
     // Get reviews for each service in each appointment
@@ -104,7 +104,7 @@ exports.myStaffAppointments = async (req, res, next) => {
           ],
         },
       ],
-      order: [['startTime', 'DESC']],
+      order: [['startTime', 'ASC']],
     });
 
     // Filter to only appointments where this staff has services assigned
