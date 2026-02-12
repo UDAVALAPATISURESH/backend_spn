@@ -6,7 +6,6 @@ const hasEmailConfig = !!(process.env.SMTP_USER || process.env.EMAIL_USER) &&
 
 // Create transporter only if credentials are provided
 let transporter = null;
-let emailServiceEnabled = false;
 if (hasEmailConfig) {
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -27,30 +26,28 @@ if (hasEmailConfig) {
   });
 
   // Verify transporter configuration (non-blocking with timeout)
+  // Note: Verification failure doesn't disable the service - it's just informational
   const verifyTimeout = setTimeout(() => {
-    console.warn('⚠️  Email service verification timed out. Email features may not work properly.');
+    console.warn('⚠️  Email service verification timed out. Will still attempt to send emails.');
     console.warn('   Please check your SMTP settings and network connectivity.');
   }, 10000); // 10 second timeout for verification
 
   transporter.verify((error, success) => {
     clearTimeout(verifyTimeout);
     if (error) {
-      emailServiceEnabled = false;
-      console.warn('⚠️  Email service configuration issue:', error.message);
+      // Don't disable service on verification failure - just warn
+      // Sometimes verification fails but actual sending works
+      console.warn('⚠️  Email service verification failed:', error.message);
       if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-        console.warn('   Connection timeout or refused. Possible issues:');
-        console.warn('   - Check SMTP_HOST and SMTP_PORT settings');
-        console.warn('   - Verify network connectivity and firewall settings');
-        console.warn('   - For Gmail, ensure "Less secure app access" is enabled or use App Password');
+        console.warn('   Connection timeout or refused during verification.');
+        console.warn('   Email sending will still be attempted, but may fail.');
+        console.warn('   Check SMTP_HOST and SMTP_PORT settings if emails don\'t send.');
       } else {
-        console.warn('   Email features will be disabled. To enable:');
-        console.warn('   1. Set SMTP_USER and SMTP_PASS in your .env file');
-        console.warn('   2. For Gmail, use an App Password: https://support.google.com/accounts/answer/185833');
-        console.warn('   3. Or use a service like SendGrid, AWS SES, etc.');
+        console.warn('   Email sending will still be attempted.');
+        console.warn('   If emails fail to send, check your SMTP configuration.');
       }
     } else {
-      emailServiceEnabled = true;
-      console.log('✅ Email service is ready to send messages');
+      console.log('✅ Email service verified and ready to send messages');
     }
   });
 } else {
@@ -62,8 +59,8 @@ if (hasEmailConfig) {
  * Send booking confirmation email
  */
 exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
-  if (!transporter || !emailServiceEnabled) {
-    console.warn('Email service not configured or not available. Skipping booking confirmation email.');
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping booking confirmation email.');
     return null;
   }
 
@@ -174,8 +171,8 @@ exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
  * Send appointment reminder email
  */
 exports.sendReminder = async (user, appointment, service, staff) => {
-  if (!transporter || !emailServiceEnabled) {
-    console.warn('Email service not configured or not available. Skipping reminder email.');
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping reminder email.');
     return null;
   }
 
@@ -256,8 +253,8 @@ exports.sendReminder = async (user, appointment, service, staff) => {
  * Send 15-minute reminder email
  */
 exports.send15MinuteReminder = async (user, appointment, service, staff) => {
-  if (!transporter || !emailServiceEnabled) {
-    console.warn('Email service not configured or not available. Skipping 15-minute reminder email.');
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping 15-minute reminder email.');
     return null;
   }
 
@@ -336,8 +333,8 @@ exports.send15MinuteReminder = async (user, appointment, service, staff) => {
  * Send password reset email
  */
 exports.sendPasswordResetEmail = async (user, resetToken) => {
-  if (!transporter || !emailServiceEnabled) {
-    console.warn('Email service not configured or not available. Skipping password reset email.');
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping password reset email.');
     return null;
   }
 
@@ -419,8 +416,8 @@ exports.sendPasswordResetEmail = async (user, resetToken) => {
  * Send payment verification email with invoice
  */
 exports.sendPaymentInvoice = async (user, appointment, payment, services = null) => {
-  if (!transporter || !emailServiceEnabled) {
-    console.warn('Email service not configured or not available. Skipping payment invoice email.');
+  if (!transporter) {
+    console.warn('Email service not configured. Skipping payment invoice email.');
     return null;
   }
 
