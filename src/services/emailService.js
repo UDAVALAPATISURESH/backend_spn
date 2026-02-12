@@ -6,26 +6,50 @@ const hasEmailConfig = !!(process.env.SMTP_USER || process.env.EMAIL_USER) &&
 
 // Create transporter only if credentials are provided
 let transporter = null;
+let emailServiceEnabled = false;
 if (hasEmailConfig) {
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
     secure: false, // true for 465, false for other ports
     auth: {
       user: process.env.SMTP_USER || process.env.EMAIL_USER,
       pass: process.env.SMTP_PASS || process.env.EMAIL_PASS,
     },
+    // Add timeout configurations to prevent long waits
+    connectionTimeout: 10000, // 10 seconds
+    socketTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000, // 10 seconds
+    // Connection pool options
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 3,
   });
 
-  // Verify transporter configuration (non-blocking)
+  // Verify transporter configuration (non-blocking with timeout)
+  const verifyTimeout = setTimeout(() => {
+    console.warn('⚠️  Email service verification timed out. Email features may not work properly.');
+    console.warn('   Please check your SMTP settings and network connectivity.');
+  }, 10000); // 10 second timeout for verification
+
   transporter.verify((error, success) => {
+    clearTimeout(verifyTimeout);
     if (error) {
+      emailServiceEnabled = false;
       console.warn('⚠️  Email service configuration issue:', error.message);
-      console.warn('   Email features will be disabled. To enable:');
-      console.warn('   1. Set SMTP_USER and SMTP_PASS in your .env file');
-      console.warn('   2. For Gmail, use an App Password: https://support.google.com/accounts/answer/185833');
-      console.warn('   3. Or use a service like SendGrid, AWS SES, etc.');
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.warn('   Connection timeout or refused. Possible issues:');
+        console.warn('   - Check SMTP_HOST and SMTP_PORT settings');
+        console.warn('   - Verify network connectivity and firewall settings');
+        console.warn('   - For Gmail, ensure "Less secure app access" is enabled or use App Password');
+      } else {
+        console.warn('   Email features will be disabled. To enable:');
+        console.warn('   1. Set SMTP_USER and SMTP_PASS in your .env file');
+        console.warn('   2. For Gmail, use an App Password: https://support.google.com/accounts/answer/185833');
+        console.warn('   3. Or use a service like SendGrid, AWS SES, etc.');
+      }
     } else {
+      emailServiceEnabled = true;
       console.log('✅ Email service is ready to send messages');
     }
   });
@@ -38,8 +62,8 @@ if (hasEmailConfig) {
  * Send booking confirmation email
  */
 exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
-  if (!transporter) {
-    console.warn('Email service not configured. Skipping booking confirmation email.');
+  if (!transporter || !emailServiceEnabled) {
+    console.warn('Email service not configured or not available. Skipping booking confirmation email.');
     return null;
   }
 
@@ -134,7 +158,13 @@ exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
     console.log('Booking confirmation email sent:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending booking confirmation email:', error);
+    // Handle timeout errors more gracefully
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
+      console.warn('Email service connection timeout. Booking confirmation email not sent.');
+      console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else {
+      console.error('Error sending booking confirmation email:', error.message || error);
+    }
     // Don't throw error - email failure shouldn't break booking
     return null;
   }
@@ -144,8 +174,8 @@ exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
  * Send appointment reminder email
  */
 exports.sendReminder = async (user, appointment, service, staff) => {
-  if (!transporter) {
-    console.warn('Email service not configured. Skipping reminder email.');
+  if (!transporter || !emailServiceEnabled) {
+    console.warn('Email service not configured or not available. Skipping reminder email.');
     return null;
   }
 
@@ -211,7 +241,13 @@ exports.sendReminder = async (user, appointment, service, staff) => {
     console.log('Reminder email sent:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending reminder email:', error);
+    // Handle timeout errors more gracefully
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
+      console.warn('Email service connection timeout. Reminder email not sent.');
+      console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else {
+      console.error('Error sending reminder email:', error.message || error);
+    }
     return null;
   }
 };
@@ -220,8 +256,8 @@ exports.sendReminder = async (user, appointment, service, staff) => {
  * Send 15-minute reminder email
  */
 exports.send15MinuteReminder = async (user, appointment, service, staff) => {
-  if (!transporter) {
-    console.warn('Email service not configured. Skipping 15-minute reminder email.');
+  if (!transporter || !emailServiceEnabled) {
+    console.warn('Email service not configured or not available. Skipping 15-minute reminder email.');
     return null;
   }
 
@@ -285,7 +321,13 @@ exports.send15MinuteReminder = async (user, appointment, service, staff) => {
     console.log('15-minute reminder email sent:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending 15-minute reminder email:', error);
+    // Handle timeout errors more gracefully
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
+      console.warn('Email service connection timeout. 15-minute reminder email not sent.');
+      console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else {
+      console.error('Error sending 15-minute reminder email:', error.message || error);
+    }
     return null;
   }
 };
@@ -294,8 +336,8 @@ exports.send15MinuteReminder = async (user, appointment, service, staff) => {
  * Send password reset email
  */
 exports.sendPasswordResetEmail = async (user, resetToken) => {
-  if (!transporter) {
-    console.warn('Email service not configured. Skipping password reset email.');
+  if (!transporter || !emailServiceEnabled) {
+    console.warn('Email service not configured or not available. Skipping password reset email.');
     return null;
   }
 
@@ -362,7 +404,13 @@ exports.sendPasswordResetEmail = async (user, resetToken) => {
     console.log('Password reset email sent:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending password reset email:', error);
+    // Handle timeout errors more gracefully
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
+      console.warn('Email service connection timeout. Password reset email not sent.');
+      console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else {
+      console.error('Error sending password reset email:', error.message || error);
+    }
     return null;
   }
 };
@@ -371,8 +419,8 @@ exports.sendPasswordResetEmail = async (user, resetToken) => {
  * Send payment verification email with invoice
  */
 exports.sendPaymentInvoice = async (user, appointment, payment, services = null) => {
-  if (!transporter) {
-    console.warn('Email service not configured. Skipping payment invoice email.');
+  if (!transporter || !emailServiceEnabled) {
+    console.warn('Email service not configured or not available. Skipping payment invoice email.');
     return null;
   }
 
@@ -558,7 +606,14 @@ exports.sendPaymentInvoice = async (user, appointment, payment, services = null)
     console.log('Payment invoice email sent:', info.messageId);
     return info;
   } catch (error) {
-    console.error('Error sending payment invoice email:', error);
+    // Handle timeout errors more gracefully
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
+      console.warn('Email service connection timeout. Payment invoice email not sent.');
+      console.warn('   This is a non-critical error - payment verification was successful.');
+      console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else {
+      console.error('Error sending payment invoice email:', error.message || error);
+    }
     return null;
   }
 };
