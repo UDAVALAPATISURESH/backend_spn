@@ -4,16 +4,40 @@ const nodemailer = require('nodemailer');
 const hasEmailConfig = !!(process.env.SMTP_USER || process.env.EMAIL_USER) && 
                        !!(process.env.SMTP_PASS || process.env.EMAIL_PASS);
 
+// Helper to get the password, preferring EMAIL_PASS if SMTP_PASS looks invalid
+const getPassword = () => {
+  const smtpPass = process.env.SMTP_PASS;
+  const emailPass = process.env.EMAIL_PASS;
+  
+  // If SMTP_PASS looks like an email address (contains @), it's probably wrong
+  // Prefer EMAIL_PASS in that case, or use SMTP_PASS if EMAIL_PASS is not available
+  if (smtpPass && smtpPass.includes('@')) {
+    if (emailPass && !emailPass.includes('@')) {
+      console.warn('⚠️  SMTP_PASS appears to be an email address. Using EMAIL_PASS instead.');
+      console.warn('   Please set SMTP_PASS to your Gmail App Password (not your email address).');
+      return emailPass;
+    } else if (emailPass) {
+      console.warn('⚠️  Both SMTP_PASS and EMAIL_PASS appear to be email addresses.');
+      console.warn('   Gmail requires an App Password, not your email address.');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
+      return emailPass; // Still use it, but warn
+    }
+  }
+  
+  return smtpPass || emailPass;
+};
+
 // Create transporter only if credentials are provided
 let transporter = null;
 if (hasEmailConfig) {
+  const password = getPassword();
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587', 10),
     secure: false, // true for 465, false for other ports
     auth: {
       user: process.env.SMTP_USER || process.env.EMAIL_USER,
-      pass: process.env.SMTP_PASS || process.env.EMAIL_PASS,
+      pass: password,
     },
     // Add timeout configurations to prevent long waits
     connectionTimeout: 10000, // 10 seconds
@@ -42,6 +66,12 @@ if (hasEmailConfig) {
         console.warn('   Connection timeout or refused during verification.');
         console.warn('   Email sending will still be attempted, but may fail.');
         console.warn('   Check SMTP_HOST and SMTP_PORT settings if emails don\'t send.');
+      } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+        console.warn('   Authentication failed. For Gmail:');
+        console.warn('   1. Make sure you\'re using an App Password, not your regular password');
+        console.warn('   2. Get an App Password: https://support.google.com/accounts/answer/185833');
+        console.warn('   3. Set SMTP_PASS or EMAIL_PASS to the 16-character App Password');
+        console.warn('   4. Ensure 2-Step Verification is enabled on your Google account');
       } else {
         console.warn('   Email sending will still be attempted.');
         console.warn('   If emails fail to send, check your SMTP configuration.');
@@ -159,6 +189,10 @@ exports.sendBookingConfirmation = async (user, appointment, service, staff) => {
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Booking confirmation email not sent.');
       console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+      console.warn('Email authentication failed. Booking confirmation email not sent.');
+      console.warn('   For Gmail, use an App Password (not your email address or regular password).');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
     } else {
       console.error('Error sending booking confirmation email:', error.message || error);
     }
@@ -242,6 +276,10 @@ exports.sendReminder = async (user, appointment, service, staff) => {
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Reminder email not sent.');
       console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+      console.warn('Email authentication failed. Reminder email not sent.');
+      console.warn('   For Gmail, use an App Password (not your email address or regular password).');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
     } else {
       console.error('Error sending reminder email:', error.message || error);
     }
@@ -322,6 +360,10 @@ exports.send15MinuteReminder = async (user, appointment, service, staff) => {
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. 15-minute reminder email not sent.');
       console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+      console.warn('Email authentication failed. 15-minute reminder email not sent.');
+      console.warn('   For Gmail, use an App Password (not your email address or regular password).');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
     } else {
       console.error('Error sending 15-minute reminder email:', error.message || error);
     }
@@ -405,6 +447,10 @@ exports.sendPasswordResetEmail = async (user, resetToken) => {
     if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.code === 'ESOCKETTIMEDOUT') {
       console.warn('Email service connection timeout. Password reset email not sent.');
       console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+      console.warn('Email authentication failed. Password reset email not sent.');
+      console.warn('   For Gmail, use an App Password (not your email address or regular password).');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
     } else {
       console.error('Error sending password reset email:', error.message || error);
     }
@@ -608,6 +654,10 @@ exports.sendPaymentInvoice = async (user, appointment, payment, services = null)
       console.warn('Email service connection timeout. Payment invoice email not sent.');
       console.warn('   This is a non-critical error - payment verification was successful.');
       console.warn('   Check SMTP settings and network connectivity if this persists.');
+    } else if (error.code === 'EAUTH' || error.responseCode === 535) {
+      console.warn('Email authentication failed. Payment invoice email not sent.');
+      console.warn('   For Gmail, use an App Password (not your email address or regular password).');
+      console.warn('   Get an App Password: https://support.google.com/accounts/answer/185833');
     } else {
       console.error('Error sending payment invoice email:', error.message || error);
     }
