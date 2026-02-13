@@ -1,7 +1,10 @@
-const { StaffAvailability, Staff } = require('../models');
+const { StaffAvailability, Staff, Service, Appointment } = require('../models');
 const { Op } = require('sequelize');
 
-// GET /api/availability/staff/:staffId
+
+/* =====================================================
+   GET STAFF AVAILABILITY
+===================================================== */
 exports.getStaffAvailability = async (req, res, next) => {
   try {
     const { staffId } = req.params;
@@ -16,7 +19,9 @@ exports.getStaffAvailability = async (req, res, next) => {
   }
 };
 
-// POST /api/availability/staff/:staffId
+/* =====================================================
+   REPLACE STAFF SCHEDULE (FULL RESET)
+===================================================== */
 exports.setStaffAvailability = async (req, res, next) => {
   try {
     const { staffId } = req.params;
@@ -55,7 +60,10 @@ exports.setStaffAvailability = async (req, res, next) => {
   }
 };
 
-// POST /api/availability/staff/:staffId/schedule
+/* =====================================================
+   ADD SINGLE SCHEDULE
+===================================================== */
+
 exports.addSchedule = async (req, res, next) => {
   try {
     const { staffId } = req.params;

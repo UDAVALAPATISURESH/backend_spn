@@ -206,9 +206,6 @@ exports.verifyPayment = async (req, res, next) => {
       let verification;
       if (payment.provider === 'cashfree' && payment.providerPaymentId) {
         verification = await paymentService.verifyCashfreePayment(payment.providerPaymentId);
-      } else if (payment.provider === 'razorpay' && payment.providerPaymentId) {
-        // For Razorpay, we need payment ID from the order
-        verification = await paymentService.getRazorpayPayment(payment.providerPaymentId);
       } else if (payment.provider === 'stripe' && payment.providerPaymentId) {
         verification = await paymentService.verifyStripePayment(payment.providerPaymentId);
       } else {
@@ -313,8 +310,6 @@ exports.verifyAndConfirm = async (req, res, next) => {
         let verification;
         if (payment.provider === 'cashfree' && payment.providerPaymentId) {
           verification = await paymentService.verifyCashfreePayment(payment.providerPaymentId);
-        } else if (payment.provider === 'razorpay' && payment.providerPaymentId) {
-          verification = await paymentService.getRazorpayPayment(payment.providerPaymentId);
         } else if (payment.provider === 'stripe' && payment.providerPaymentId) {
           verification = await paymentService.verifyStripePayment(payment.providerPaymentId);
         } else {

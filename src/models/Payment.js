@@ -4,7 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     appointmentId: { type: DataTypes.INTEGER, allowNull: false },
     amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
     currency: { type: DataTypes.STRING, defaultValue: 'INR' },
-    provider: { type: DataTypes.ENUM('stripe', 'razorpay', 'cashfree'), allowNull: false },
+    provider: { type: DataTypes.ENUM('stripe', 'cashfree'), allowNull: false },
     providerPaymentId: DataTypes.STRING,
     status: {
       type: DataTypes.ENUM('pending', 'paid', 'failed', 'refunded'),

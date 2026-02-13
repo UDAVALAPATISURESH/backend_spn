@@ -97,10 +97,11 @@ exports.createPaymentIntent = async (req, res, next) => {
         });
       } else if (provider === 'razorpay') {
         // Create Razorpay Order
+        const orderId = `appt_${appointmentId}_${Date.now()}`;
         const razorpayOrder = await paymentService.createRazorpayOrder(
           amount,
           'INR',
-          `appt_${appointmentId}`
+          orderId
         );
 
         paymentData = {
@@ -140,11 +141,11 @@ exports.createPaymentIntent = async (req, res, next) => {
             message: 'Phone number is required for payment. Please update your profile with a phone number before proceeding with payment.' 
           });
         }
-
+        const orderId = `appt_${appointmentId}_${Date.now()}`;
         const cashfreeOrder = await paymentService.createCashfreePayment(
           amount,
           'INR',
-          `appt_${appointmentId}`,
+          orderId,
           {
             phone: user.phone,
             email: user.email,

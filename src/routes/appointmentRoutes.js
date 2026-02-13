@@ -23,7 +23,7 @@ router.put('/:id/reschedule', appointmentController.rescheduleAppointment);
 router.put('/:id/complete-service/:serviceId', appointmentController.completeService);
 
 // PUT /api/appointments/:id/complete - Complete entire appointment (backward compatibility)
-router.put('/:id/complete', appointmentController.completeAppointment);
+// router.put('/:id/complete', appointmentController.completeAppointment);
 
 // DELETE /api/appointments/:id
 router.delete('/:id', appointmentController.cancelAppointment);

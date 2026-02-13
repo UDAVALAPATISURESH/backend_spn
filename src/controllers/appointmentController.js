@@ -3,7 +3,9 @@ const { Appointment, Service, Staff, User, StaffAvailability, Review, Appointmen
 const { Op } = require('sequelize');
 const emailService = require('../services/emailService');
 
-// GET /api/appointments/my
+/* =====================================================
+   CUSTOMER APPOINTMENTS
+===================================================== */
 exports.myAppointments = async (req, res, next) => {
   try {
     const appointments = await Appointment.findAll({
@@ -17,7 +19,7 @@ exports.myAppointments = async (req, res, next) => {
           include: [Service, Staff],
         },
       ],
-      order: [['startTime', 'DESC']],
+      order: [['createdAt', 'DESC']],
     });
 
     // Get reviews for each service in each appointment
@@ -73,7 +75,9 @@ exports.myAppointments = async (req, res, next) => {
   }
 };
 
-// GET /api/appointments/staff/my - Get appointments for logged-in staff member
+/* =====================================================
+   STAFF APPOINTMENTS
+===================================================== */
 exports.myStaffAppointments = async (req, res, next) => {
   try {
     // Find staff member by matching email with user email
@@ -104,7 +108,7 @@ exports.myStaffAppointments = async (req, res, next) => {
           ],
         },
       ],
-      order: [['startTime', 'DESC']],
+      order: [['createdAt', 'DESC']],
     });
 
     // Filter to only appointments where this staff has services assigned
@@ -147,6 +151,9 @@ exports.myStaffAppointments = async (req, res, next) => {
   }
 };
 
+/* =====================================================
+   CREATE APPOINTMENT
+===================================================== */
 // POST /api/appointments
 // Creates a new appointment in "pending" status with one or more services.
 // Admin must later confirm the appointment from the admin panel.
@@ -298,7 +305,9 @@ exports.createAppointment = async (req, res, next) => {
   }
 };
 
-// PUT /api/appointments/:id/reschedule
+/* =====================================================
+   RESCHEDULE
+===================================================== */
 exports.rescheduleAppointment = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -309,44 +318,58 @@ exports.rescheduleAppointment = async (req, res, next) => {
     }
 
     const appointment = await Appointment.findByPk(id, {
-      include: [Service, Staff],
+      include: [
+        { model: Service, as: 'PrimaryService' },
+        { model: Staff, as: 'PrimaryStaff' },
+      ],
     });
 
     if (!appointment) {
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    // Check if user owns this appointment (or is admin)
     if (appointment.userId !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'You can only reschedule your own appointments' });
     }
 
-    // Policy: Can't reschedule if appointment is less than 24 hours away
-    const appointmentTime = new Date(appointment.startTime);
-    const now = new Date();
-    const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
+    // const appointmentTime = new Date(appointment.startTime);
+    // const now = new Date();
+    // const hoursUntilAppointment = (appointmentTime - now) / (1000 * 60 * 60);
 
-    const MIN_RESCHEDULE_HOURS = process.env.MIN_RESCHEDULE_HOURS || 24;
-    if (hoursUntilAppointment < MIN_RESCHEDULE_HOURS) {
-      return res.status(400).json({
-        message: `Appointments can only be rescheduled at least ${MIN_RESCHEDULE_HOURS} hours in advance`,
-      });
-    }
+    // const MIN_RESCHEDULE_HOURS = process.env.MIN_RESCHEDULE_HOURS || 24;
+    // if (hoursUntilAppointment < MIN_RESCHEDULE_HOURS) {
+    //   return res.status(400).json({
+    //     message: `Appointments can only be rescheduled at least ${MIN_RESCHEDULE_HOURS} hours in advance`,
+    //   });
+    // }
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    // Policy: Can't reschedule cancelled or completed appointments
+      const appointmentDate = new Date(appointment.startTime);
+      appointmentDate.setHours(0, 0, 0, 0);
+
+      const diffDays = (appointmentDate - today) / (1000 * 60 * 60 * 24);
+
+      if (diffDays < 1) {
+        return res.status(400).json({
+          message: 'Cannot reschedule or cancel on the same day of appointment',
+        });
+      }
+
+
+
     if (appointment.status === 'cancelled' || appointment.status === 'completed') {
       return res.status(400).json({
         message: `Cannot reschedule ${appointment.status} appointments`,
       });
     }
 
-    const service = await Service.findByPk(appointment.serviceId);
-    const staff = await Staff.findByPk(appointment.staffId);
+    const service = appointment.PrimaryService;
+    const staff = appointment.PrimaryStaff;
 
     const newStart = new Date(startTime);
     const newEnd = new Date(newStart.getTime() + service.durationMinutes * 60000);
 
-    // Check if staff is available at new time
     const dayOfWeek = newStart.getDay();
     const availability = await StaffAvailability.findOne({
       where: { staffId: appointment.staffId, dayOfWeek },
@@ -369,19 +392,14 @@ exports.rescheduleAppointment = async (req, res, next) => {
       }
     }
 
-    // Check for conflicting appointments (excluding current appointment)
     const conflictingAppointment = await Appointment.findOne({
       where: {
         staffId: appointment.staffId,
         id: { [Op.ne]: id },
         status: { [Op.ne]: 'cancelled' },
         [Op.or]: [
-          {
-            startTime: { [Op.between]: [newStart, newEnd] },
-          },
-          {
-            endTime: { [Op.between]: [newStart, newEnd] },
-          },
+          { startTime: { [Op.between]: [newStart, newEnd] } },
+          { endTime: { [Op.between]: [newStart, newEnd] } },
           {
             [Op.and]: [
               { startTime: { [Op.lte]: newStart } },
@@ -396,21 +414,23 @@ exports.rescheduleAppointment = async (req, res, next) => {
       return res.status(400).json({ message: 'This time slot is already booked' });
     }
 
-    // Update appointment
     await appointment.update({
       startTime: newStart,
       endTime: newEnd,
     });
 
     const updatedAppointment = await Appointment.findByPk(id, {
-      include: [Service, Staff, User],
+      include: [
+        { model: Service, as: 'PrimaryService' },
+        { model: Staff, as: 'PrimaryStaff' },
+        { model: User },
+      ],
     });
 
-    // Send rescheduling confirmation email
     const user = await User.findByPk(appointment.userId);
-    emailService.sendBookingConfirmation(user, updatedAppointment, service, staff).catch((err) => {
-      console.error('Failed to send rescheduling email:', err);
-    });
+    emailService
+      .sendBookingConfirmation(user, updatedAppointment, service, staff)
+      .catch((err) => console.error('Failed to send email:', err));
 
     res.json({
       message: 'Appointment rescheduled successfully',
@@ -421,6 +441,9 @@ exports.rescheduleAppointment = async (req, res, next) => {
   }
 };
 
+/* =====================================================
+   COMPLETE SERVICE
+===================================================== */
 // PUT /api/appointments/:id/complete-service/:serviceId - Mark individual service as completed (staff only)
 exports.completeService = async (req, res, next) => {
   try {
@@ -510,6 +533,7 @@ exports.completeService = async (req, res, next) => {
   }
 };
 
+
 // PUT /api/appointments/:id/complete - Mark entire appointment as completed (backward compatibility)
 exports.completeAppointment = async (req, res, next) => {
   try {
@@ -581,13 +605,19 @@ exports.completeAppointment = async (req, res, next) => {
   }
 };
 
+/* =====================================================
+   COMPLETE SERVICE
+===================================================== */
 // DELETE /api/appointments/:id
 exports.cancelAppointment = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     const appointment = await Appointment.findByPk(id, {
-      include: [Service, Staff],
+      include: [
+        { model: Service, as: 'PrimaryService' },
+        { model: Staff, as: 'PrimaryStaff' },
+      ],
     });
 
     if (!appointment) {
@@ -627,7 +657,10 @@ exports.cancelAppointment = async (req, res, next) => {
     // This would require Payment model integration
 
     const updatedAppointment = await Appointment.findByPk(id, {
-      include: [Service, Staff],
+      include: [
+        { model: Service, as: 'PrimaryService' },
+        { model: Staff, as: 'PrimaryStaff' },
+      ],
     });
 
     res.json({
